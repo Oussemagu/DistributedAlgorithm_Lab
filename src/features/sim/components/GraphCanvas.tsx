@@ -1,6 +1,6 @@
 import React from 'react'
 import { useSim } from '../state/SimProvider'
-import type { MessageStep, AlgorithmStep } from '../model/algorithmCinema'
+import type { MessageStep, AlgorithmStep, NodeStateStep, CinemaNodeState } from '../model/algorithmCinema'
 
 export default function GraphCanvas() {
   const { state } = useSim()
@@ -81,7 +81,41 @@ export default function GraphCanvas() {
     if (t.includes('REPLY')) return 'seagreen'
     return '#333'
   }
-
+  const nodeStates = React.useMemo(() => {
+  const map = new Map<number, Partial<CinemaNodeState>>()
+  state.processes.forEach((p) => map.set(p.id, { ...p }))
+  steps.slice(0, idx).forEach((s) => {
+    if ((s as any).type === 'node') {
+      const ns = s as NodeStateStep
+      const prev = map.get(ns.nodeId) || {}
+      map.set(ns.nodeId, { ...prev, ...ns.state })
+    }
+  })
+  return map
+}, [state.processes, steps, idx])
+const csSegments = React.useMemo(() => {
+  const segments: Array<{ nodeId: number; enterIdx: number; leaveIdx: number }> = []
+  const enterMap = new Map<number, number>()
+  steps.forEach((s, i) => {
+    if ((s as any).type === 'cs') {
+      const cs = s as any
+      if (cs.action === 'enter') {
+        // ✅ utiliser le step PRÉCÉDENT comme point de départ du segment
+        const prevIdx = i > 0 ? i - 1 : i
+        enterMap.set(cs.nodeId, prevIdx)
+      } else if (cs.action === 'leave') {
+        const enterIdx = enterMap.get(cs.nodeId)
+        if (enterIdx !== undefined) {
+          // ✅ utiliser le step PRÉCÉDENT comme point de fin du segment
+          const leaveIdx = i > 0 ? i - 1 : i
+          segments.push({ nodeId: cs.nodeId, enterIdx, leaveIdx })
+          enterMap.delete(cs.nodeId)
+        }
+      }
+    }
+  })
+  return segments
+}, [steps])
   return (
     <svg width={width} height={height} style={{ background: '#fff' }}>
       <defs>
@@ -108,67 +142,156 @@ export default function GraphCanvas() {
             <g key={n.id}>
               <text x={10} y={y + 5} fontSize={13} fontWeight={600}>{n.label ?? `P${n.id}`}</text>
               <line x1={leftMargin} y1={y} x2={width - rightMargin} y2={y} stroke="#e6e6e6" strokeWidth={2} />
+                        {/* Clock badge */}
+{nodeStates.get(n.id)?.clock !== undefined && (
+  <g>
+    <rect x={leftMargin + 4} y={y - 10} rx={3} width={36} height={20} fill="#f0f0ff" stroke="#8888cc" strokeWidth={1} />
+    <text x={leftMargin + 22} y={y + 5} fontSize={11} textAnchor="middle" fill="#333">
+      C={nodeStates.get(n.id)?.clock}
+    </text>
+  </g>
+)}
               {/* CS indicator */}
-              {n.color === 'orange' && (
+              {nodeStates.get(n.id)?.color === 'orange' && (
                 <rect x={width - rightMargin - 60} y={y - 12} rx={4} width={48} height={24} fill="orange" stroke="#b85" />
               )}
             </g>
           )
         })}
       </g>
-
+        {/* ✅ Segments SC — rectangle rouge sur la lane du process en SC */}
+<g>
+  {csSegments.map((seg) => {
+    if (seg.enterIdx >= idx) return null
+    const nodeIndex = nodes.findIndex((n) => n.id === seg.nodeId)
+    if (nodeIndex === -1) return null
+    const y = processY(nodeIndex)
+    const xStart = stepX(seg.enterIdx)
+    const xEnd = seg.leaveIdx <= idx ? stepX(seg.leaveIdx) : stepX(idx)
+    return (
+      <g key={`cs-${seg.nodeId}-${seg.enterIdx}`}>
+  <rect
+    x={xStart}
+    y={y - 6}
+    width={Math.max(4, xEnd - xStart)}
+    height={12}
+    fill="red"
+    opacity={0.35}
+    rx={3}
+  />
+  <text
+    x={xStart + Math.max(4, xEnd - xStart) / 2}
+    y={y - 10}
+    fontSize={10}
+    textAnchor="middle"
+    fill="red"
+    fontWeight={600}
+  >
+    SC
+  </text>
+</g>
+    )
+  })}
+</g>
       {/* messages for visible steps (paired send -> deliver), grouped by sender so tails share same origin */}
-      <g>
-        {groups.map((g, gi) => {
-          const baseSendIndex = g.baseSendIndex
-          const senderIndex = nodes.findIndex((p) => p.id === g.from)
-          if (senderIndex === -1) return null
-          const x1 = stepX(baseSendIndex)
-          const y1 = processY(senderIndex)
-          return (
-            <g key={`group-${g.from}-${baseSendIndex}`}>
-              {g.items.map((pair, i) => {
-                const { sendIndex, deliverIndex, send } = pair
-                // if the logical send happened after current time, hide
-                if (sendIndex >= idx) return null
-                const toIndex = nodes.findIndex((p) => p.id === send.to)
-                if (toIndex === -1) return null
-                const x2 = stepX(deliverIndex)
-                const y2 = processY(toIndex)
-                const color = colorFor(send)
+  
+<g>
+  {pairs.map((pair) => {
+    const { sendIndex, deliverIndex, send } = pair
+    if (sendIndex >= idx) return null
 
-                // draw straight diagonal lines from single shared origin (x1,y1) to destination (x2,y2)
-                const originX = x1
-                const originY = y1
-                if (deliverIndex <= idx) {
-                  const mx = (originX + x2) / 2
-                  const my = (originY + y2) / 2
-                  return (
-                    <g key={`${send.id}-${pair.deliver.id}`}>
-                      <line x1={originX} y1={originY} x2={x2} y2={y2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} />
-                      <rect x={mx - 28} y={my - 12} rx={6} width={56} height={20} fill="#fff" stroke={color} />
-                      <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
-                    </g>
-                  )
-                } else {
-                  const progress = Math.max(0, Math.min(1, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
-                  const cx2 = originX + (x2 - originX) * progress
-                  const cy2 = originY + (y2 - originY) * progress
-                  const mx2 = (originX + cx2) / 2
-                  const my2 = (originY + cy2) / 2
-                  return (
-                    <g key={`${send.id}-inflight-${i}`}>
-                      <line x1={originX} y1={originY} x2={cx2} y2={cy2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} strokeDasharray="4 3" />
-                      <rect x={mx2 - 28} y={my2 - 12} rx={6} width={56} height={20} fill="#fff" stroke={color} />
-                      <text x={mx2} y={my2 + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
-                    </g>
-                  )
-                }
-              })}
-            </g>
-          )
-        })}
-      </g>
+    const fromIndex = nodes.findIndex((p) => p.id === send.from)
+    const toIndex = nodes.findIndex((p) => p.id === send.to)
+    if (fromIndex === -1 || toIndex === -1) return null
+
+  const sharedSendIndex = (() => {
+  if (!send.msgType.toUpperCase().includes('REQUEST')) return sendIndex
+  const first = messages.find(
+    ({ m }) => m.from === send.from && m.clock === send.clock
+  )
+  return first ? first.stepIndex : sendIndex
+})()
+
+const adjustedDeliverIndex = (() => {
+  if (!send.msgType.toUpperCase().includes('REQUEST')) return deliverIndex
+  return sharedSendIndex + (toIndex + 1) * 3
+})()
+const x1 = stepX(sharedSendIndex)
+/*const t1 = stepY(sharedSendIndex)*/
+    const y1 = processY(fromIndex)
+    const x2 = stepX(deliverIndex)
+    const y2 = processY(toIndex)
+    const color = colorFor(send)
+
+    const receiverClockAtDelivery = (() => {
+  if (pair.deliver.clock !== undefined && pair.deliver !== pair.send) {
+    return pair.deliver.clock
+  }
+  if (send.msgType.toUpperCase().includes('REQUEST')) {
+    // ✅ clock du receiver AVANT réception = rejouer les nodeSteps jusqu'à sendIndex
+    let clockBeforeReceive = 0
+    steps.slice(0, sendIndex).forEach((s) => {
+      if ((s as any).type === 'node') {
+        const ns = s as NodeStateStep
+        if (ns.nodeId === send.to && ns.state.clock !== undefined) {
+          clockBeforeReceive = ns.state.clock
+        }
+      }
+    })
+    return Math.max(clockBeforeReceive, send.clock) + 1
+  }
+  return send.clock + 1
+})()
+
+    if (deliverIndex <= idx) {
+      const mx = (x1 + x2) / 2
+      const my = (y1 + y2) / 2
+      return (
+        <g key={`${send.id}-delivered`}>
+          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={2} markerEnd="url(#arrow)" />
+          
+          {/* label on arrow */}
+          <rect x={mx - 28} y={my - 12} rx={6} width={56} height={20} fill="#fff" stroke={color} />
+          <text x={mx} y={my + 5} fontSize={10} textAnchor="middle" fill="#000">
+            {send.msgType}{send.clock !== undefined ? `@${send.clock}` : ''}
+          </text>
+
+          {/* ✅ send dot + clock on sender lane */}
+          <circle cx={x1} cy={y1} r={5} fill={color} />
+          <text x={x1} y={y1 - 10} fontSize={11} textAnchor="middle" fill={color} fontWeight={600}>
+            {send.clock}
+          </text>
+
+          {/* ✅ receive dot + max(Cj, Csend)+1 on receiver lane */}
+          <circle cx={x2} cy={y2} r={5} fill={color} />
+          <text x={x2} y={y2 - 10} fontSize={11} textAnchor="middle" fill={color} fontWeight={600}>
+            {receiverClockAtDelivery}
+          </text>
+        </g>
+      )
+    } else {
+      // in-flight
+      const progress = Math.max(0, Math.min(1, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
+      const cx2 = x1 + (x2 - x1) * progress
+      const cy2 = y1 + (y2 - y1) * progress
+      const mx = (x1 + cx2) / 2
+      const my = (y1 + cy2) / 2
+      return (
+        <g key={`${send.id}-inflight`}>
+          <line x1={x1} y1={y1} x2={cx2} y2={cy2} stroke={color} strokeWidth={2} markerEnd="url(#arrow)" strokeDasharray="4 3" />
+          <rect x={mx - 28} y={my - 12} rx={6} width={56} height={20} fill="#fff" stroke={color} />
+          <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
+
+          {/* ✅ send dot + clock always visible even in flight */}
+          <circle cx={x1} cy={y1} r={5} fill={color} />
+          <text x={x1} y={y1 - 10} fontSize={11} textAnchor="middle" fill={color} fontWeight={600}>
+            {send.clock}
+          </text>
+        </g>
+      )
+    }
+  })}
+    </g>
     </svg>
   )
 }

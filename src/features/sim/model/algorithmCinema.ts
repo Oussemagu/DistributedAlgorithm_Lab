@@ -5,6 +5,14 @@ export type CinemaNodeState = {
   label?: string
   color?: string
   badges?: Record<string, any>
+  clock?: number         // ← current Lamport clock of this node
+
+}
+export type CriticalSectionStep = {
+  type: 'cs'
+  id: string
+  nodeId: NodeId
+  action: 'enter' | 'leave'
 }
 
 export type MessageStep = {
@@ -14,6 +22,8 @@ export type MessageStep = {
   to: NodeId
   msgType: string
   meta?: any
+  clock: number          // ← Lamport timestamp at send time
+
 }
 
 export type NodeStateStep = {
@@ -23,13 +33,14 @@ export type NodeStateStep = {
   state: Partial<CinemaNodeState>
 }
 
+
 export type NarrationStep = {
   type: 'narration'
   id: string
   text: string
 }
 
-export type AlgorithmStep = MessageStep | NodeStateStep | NarrationStep
+export type AlgorithmStep = MessageStep | NodeStateStep | NarrationStep | CriticalSectionStep
 
 export type AlgorithmCinemaPayload = {
   metadata?: {

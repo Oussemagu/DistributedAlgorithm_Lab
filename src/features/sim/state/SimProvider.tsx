@@ -32,7 +32,10 @@ type Action =
 function reducer(state: SimState, action: Action): SimState {
   switch (action.type) {
     case 'INIT_PROCESSES':
-      return { ...state, processes: action.processes }
+      return {
+    ...state,
+    processes: action.processes.map((p) => ({ ...p, clock: 0 }))
+  }
     case 'LOAD_CINEMA':
       return { ...state, steps: action.payload.steps || [], index: 0, playing: false }
     case 'PLAY':

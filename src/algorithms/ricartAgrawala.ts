@@ -1,53 +1,69 @@
-import { Message } from '../types'
+export function createRicartAgrawala(myId: number) {
+  let clock = 0
+  let requestClock = 0
+  let deferred: any[] = []
+  let repliesReceived = new Set<number>()
+  let inCS = false
 
-export type RAState = {
-  id: number
-  timestamp?: number
-  replies: Set<number>
-  requesting: boolean
-}
+  // ✅ Règle ② : tick = événement local
+  function tick() { clock += 1; return clock }
+  // ✅ Règle ④ : réception
+  function update(received: number) { clock = Math.max(clock, received) + 1; return clock }
 
-export function createRicartAgrawala(id: number) {
-  const state: RAState = { id, replies: new Set(), requesting: false }
-  const deferred: number[] = []
-
-  function requestCS(time: number, send: (m: Message) => void, peers: number[]) {
-    state.requesting = true
-    state.timestamp = time
-    state.replies.clear()
-    peers.forEach((p) => send({ from: id, to: p, type: 'RA_REQUEST', payload: { ts: time } }))
+  function requestCS(send: Function, peers: number[]) {
+    repliesReceived.clear()
+    // ✅ Règle ②③ : un tick PAR envoi
+    peers.forEach((p) => {
+      tick()
+      requestClock = clock             // on retient le clock du DERNIER envoi
+      send({ from: myId, to: p, type: 'RA_REQUEST', clock })
+    })
   }
 
-  function handle(msg: Message, send: (m: Message) => void) {
+  function handle(msg: any, send: Function) {
+    // ✅ Règle ④ appliquée à CHAQUE réception
+    update(msg.clock ?? 0)
+
     if (msg.type === 'RA_REQUEST') {
-      const theirTs = msg.payload.ts
-      const reply = { from: id, to: msg.from, type: 'RA_REPLY' }
-      // simple priority: lower timestamp first; tie-break by id
-      const iRequesting = state.requesting && (state.timestamp! < theirTs || (state.timestamp === theirTs && id < msg.from))
-      if (iRequesting) {
-        // defer reply: record requester to reply when we release
-        deferred.push(msg.from)
-      } else {
-        send(reply)
-      }
-    } else if (msg.type === 'RA_REPLY') {
-      state.replies.add(msg.from)
-    }
-  }
+      // ✅ Logique de priorité claire et séparée
+      const notRequesting = requestClock === 0
+      const hasHigherPriority =
+        msg.clock < requestClock ||
+        (msg.clock === requestClock && msg.from < myId)
 
-  function release(send: (m: Message) => void) {
-    state.requesting = false
-    state.timestamp = undefined
-    // send replies to all deferred requesters
-    while (deferred.length > 0) {
-      const to = deferred.shift()!
-      send({ from: id, to, type: 'RA_REPLY' })
+      if (!inCS && (notRequesting || hasHigherPriority)) {
+        tick()                         // ✅ événement local avant envoi
+        send({ from: myId, to: msg.from, type: 'RA_REPLY', clock })
+      } else {
+        deferred.push(msg)
+      }
+    }
+
+    if (msg.type === 'RA_REPLY') {
+      repliesReceived.add(msg.from)
     }
   }
 
   function gotAll(peers: number[]) {
-    return state.replies.size === peers.length
+    return peers.every((p) => repliesReceived.has(p))
   }
 
-  return { state, requestCS, handle, gotAll, release }
+  function enterCS() {
+    inCS = true
+  }
+
+  function release(send: Function) {
+    inCS = false
+    requestClock = 0
+    const pending = deferred
+    deferred = []
+    pending.forEach((msg) => {
+      tick()                           // ✅ événement local avant chaque reply
+      send({ from: myId, to: msg.from, type: 'RA_REPLY', clock })
+    })
+  }
+
+  function getClock() { return clock }
+
+  return { requestCS, handle, gotAll, enterCS, release, getClock }
 }

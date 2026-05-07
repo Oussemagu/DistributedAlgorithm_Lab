@@ -24,6 +24,7 @@ export default function App() {
   const [autoRun, setAutoRun] = useState<boolean>(true)
   const [speed, setSpeed] = useState<number>(300)
   const [algorithm, setAlgorithm] = useState<string>('ricart')
+  const [scenarioId, setScenarioId] = useState<string>('scenario1')
 
   function appendLog(s: string) {
     setLogs((l) => [...l, new Date().toLocaleTimeString() + ' ' + s].slice(-500))
@@ -82,47 +83,59 @@ export default function App() {
   }
 
   async function requestCS() {
-    appendLog('Requesting CS (Ricart–Agrawala)')
-    const sim = simRef.current
-    if (!sim) return appendLog('Start simulation first')
-    const requester = selectedProcess
-    const peers = processes.map((p) => p.id).filter((id) => id !== requester)
-    const ra = raInstances.current?.[requester]
-    if (!ra) return appendLog('RA instance missing')
-    // mark UI state
-    setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'requesting' } : pp)))
-    ra.requestCS(Date.now(), (m: Message) => sim.send(m), peers)
-    appendLog(`Process ${requester} sent RA_REQUEST to peers`)
+  appendLog('Requesting CS (Ricart–Agrawala)')
+  const sim = simRef.current
+  if (!sim) return appendLog('Start simulation first')
+  const requester = selectedProcess
+  const peers = processes.map((p) => p.id).filter((id) => id !== requester)
+  const ra = raInstances.current?.[requester]
+  if (!ra) return appendLog('RA instance missing')
 
-    // watch for replies; when all replies received, enter CS
-    const checkInterval = setInterval(() => {
-      try {
-        if (ra.gotAll(peers)) {
-          clearInterval(checkInterval)
-          appendLog(`Process ${requester} received all RA_REPLY — entering CS`)
-          setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'in_cs' } : pp)))
-          // hold CS for 2s then release
-          setTimeout(() => {
-            appendLog(`Process ${requester} leaving CS — releasing replies`)
-            ra.release((m: Message) => sim.send(m))
-            setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'idle' } : pp)))
-          }, 2000)
-        }
-      } catch (e) {
-        clearInterval(checkInterval)
-      }
-    }, 150)
-
-    // generate and load cinema for deterministic playback demo
-    try {
-      const { generateRicartAgrawalaCinema } = await import('./features/sim/algorithms/ricartAgrawalaCinema')
-      const payload = generateRicartAgrawalaCinema(requester, processes.map((p) => p.id))
-      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
-      appendLog('Loaded cinema payload for playback')
-    } catch (e) {
-      appendLog('Failed to load cinema payload: ' + String(e))
+  // ✅ Générer le cinema EN PREMIER, avant tout envoi
+ try {
+    const { generateRicartAgrawalaCinema } = await import('./features/sim/algorithms/ricartAgrawalaCinema')
+    const scenarioMap: Record<string, string> = {
+      scenario1: './features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario1',
+      scenario2: './features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario2',
+      scenario3: './features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario3',
     }
+    const { default: scenario } = await import(/* @vite-ignore */ scenarioMap[scenarioId])
+    const payload = generateRicartAgrawalaCinema({
+      requester,
+      processes: processes.map((p) => p.id),
+      alsoRequesting: scenario.alsoRequesting,
+    })
+    window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+    window.dispatchEvent(new CustomEvent('sim:init_processes', { 
+      detail: processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' })) 
+    }))
+    appendLog('Loaded cinema payload for playback')}
+   catch (e) {
+    appendLog('Failed to load cinema payload: ' + String(e))
   }
+
+  // ✅ Ensuite seulement, lancer la simulation temps-réel
+  setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'requesting' } : pp)))
+  ra.requestCS((m: Message) => sim.send(m), peers)
+  appendLog(`Process ${requester} sent RA_REQUEST to peers`)
+
+  const checkInterval = setInterval(() => {
+    try {
+      if (ra.gotAll(peers)) {
+        clearInterval(checkInterval)
+        appendLog(`Process ${requester} received all RA_REPLY — entering CS`)
+        setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'in_cs' } : pp)))
+        setTimeout(() => {
+          appendLog(`Process ${requester} leaving CS — releasing replies`)
+          ra.release((m: Message) => sim.send(m))
+          setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'idle' } : pp)))
+        }, 2000)
+      }
+    } catch (e) {
+      clearInterval(checkInterval)
+    }
+  }, 150)
+}
 
   function step() {
     const sim = simRef.current
@@ -184,6 +197,8 @@ export default function App() {
                   setAlgorithm={setAlgorithm}
                   numberOfProcesses={numberOfProcesses}
                   setNumberOfProcesses={setNumberOfProcesses}
+                    scenarioId={scenarioId}
+  setScenarioId={setScenarioId}
                 />
                 
                 

@@ -25,12 +25,13 @@ export class Simulator {
   log(s: string) {
     this.onLog?.(s)
   }
-
+  // In the send() method, ensure the clock field is preserved:
   send(msg: Message) {
-    msg.time = Date.now()
-    this.messageQueue.push(msg)
-    // do not notify UI on send - notify on deliver to enable step-by-step
-  }
+  // clock is already set by the sender; just route it
+  this.onMessage?.(msg)
+  const handler = this.handlers.get(msg.to)
+  if (handler) handler(msg)
+}
 
   onMessage?: (m: Message) => void
 
