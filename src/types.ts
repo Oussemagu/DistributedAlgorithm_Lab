@@ -6,6 +6,9 @@ export type Message = {
   type: string
   payload?: any
   time?: number
+  clock?: number   // ← Lamport timestamp
+
+
 }
 
 export type Process = {

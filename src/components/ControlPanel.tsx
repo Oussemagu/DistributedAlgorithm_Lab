@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, Stack, Title, Group, Select, Slider, Switch, NumberInput } from '@mantine/core'
+import { Button, Stack, Title, Group, Select, Slider, Switch, NumberInput,Text } from '@mantine/core'
 import RingElectionControls from './RingElectionControls'
 import type { RingVariant } from '../features/sim/algorithms/ringElectionCinema'
 
@@ -27,6 +27,8 @@ type Props = {
   setNumberOfProcesses: (n: number) => void
   tokenHolder: number
   setTokenHolder: (n: number) => void
+  scenarioId: string
+  setScenarioId: (id: string) => void
 }
 
 export default function ControlPanel({
@@ -37,8 +39,26 @@ export default function ControlPanel({
   algorithm, setAlgorithm,
   numberOfProcesses, setNumberOfProcesses,
   tokenHolder, setTokenHolder,
+  scenarioId, setScenarioId,
 }: Props) {
-  return (
+  const scenarios = [
+  {
+    id: 'scenario1',
+    label: 'Scénario 1 — Seul demandeur',
+    description: 'P1 demande seul la SC. Tous les peers répondent immédiatement.',
+  },
+  {
+    id: 'scenario2',
+    label: 'Scénario 2 — 2 demandeurs concurrents',
+    description: 'P1 et P2 demandent en même temps. P1 a priorité (timestamp plus bas).',
+  },
+  {
+    id: 'scenario3',
+    label: 'Scénario 3 — 3 demandeurs concurrents',
+    description: 'P1, P2 et P3 demandent en même temps. P1 entre en SC en premier.',
+  },
+]
+ return (
     <Stack>
       <Title order={4}>Controls</Title>
       <Group>
@@ -72,6 +92,37 @@ export default function ControlPanel({
           numberOfProcesses={numberOfProcesses}
           onRunElection={onRunRingElection}
         />
+      )}
+      {/* Sélecteur de scénario — uniquement pour Ricart-Agrawala */}
+      {algorithm === 'ricart' && (
+        <Stack gap={6}>
+          <Text size="sm" fw={500}>Scénario</Text>
+          {scenarios.map((s) => (
+            <div
+              key={s.id}
+              onClick={() => setScenarioId(s.id)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: `2px solid ${scenarioId === s.id ? '#228be6' : '#dee2e6'}`,
+                background: scenarioId === s.id ? '#e7f5ff' : '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              <Text size="sm" fw={600} c={scenarioId === s.id ? 'blue' : 'dark'}>
+                {s.label}
+              </Text>
+              <Text size="xs" c="dimmed">{s.description}</Text>
+            </div>
+          ))}
+        </Stack>
+      )}
+
+      {/* Boutons d'action selon l'algorithme */}
+      {algorithm === 'ricart' && <Button onClick={onRequestCS}>Request CS (Ricart–Agrawala)</Button>}
+      {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
+      {(algorithm === 'bully' || algorithm === 'ring') && (
+        <Button onClick={onStep}>Run {algorithm === 'bully' ? 'Bully' : 'Ring'} Election (step)</Button>
       )}
 
       {algorithm !== 'ring' && (
@@ -110,3 +161,5 @@ export default function ControlPanel({
     </Stack>
   )
 }
+
+ 
