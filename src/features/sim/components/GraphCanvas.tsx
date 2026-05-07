@@ -983,7 +983,7 @@ const csSegments = React.useMemo(() => {
               )}
               <line x1={leftMargin} y1={y} x2={width - rightMargin} y2={y} stroke="#e6e6e6" strokeWidth={2} />
                         {/* Clock badge */}
-{nodeStates.get(n.id)?.clock !== undefined && (
+{nodeStates.get(n.id)?.clock !== undefined &&  state.algorithm === 'ricart' &&(
   <g>
     <rect x={leftMargin + 4} y={y - 10} rx={3} width={36} height={20} fill="#f0f0ff" stroke="#8888cc" strokeWidth={1} />
     <text x={leftMargin + 22} y={y + 5} fontSize={11} textAnchor="middle" fill="#333">
@@ -1033,8 +1033,63 @@ const csSegments = React.useMemo(() => {
     )
   })}
 </g>
-      {/* messages for visible steps (paired send -> deliver), grouped by sender so tails share same origin */}
-  
+ {/* ═══ EVENT DOTS (vector/matrix clock labels) ═══ */}      
+  {/* <g>
+      {visibleNodeSteps.map(({ stepIndex, step }) => {
+        const nodeIndex = nodes.findIndex((node) => node.id === step.nodeId)
+        if (nodeIndex === -1) return null
+        const x = stepX(stepIndex)
+        const y = processY(nodeIndex)
+        const kind = String(step.state.badges?.kind || '')
+        const color = kind === 'receive' ? '#2f9e44' : kind === 'send' ? '#1971c2' : '#868e96'
+        const vector = String(step.state.badges?.vector || '')
+        const event = String(step.state.badges?.event || '')
+        return (
+          <g key={step.id}>
+            <circle cx={x} cy={y} r={5} fill={color} stroke="#fff" strokeWidth={2} />
+            <text x={x} y={y - 10} fontSize={10} textAnchor="middle" fill="#222" fontWeight={700}>{event}</text>
+            // only show vector for vector/matrix algorithms 
+            {(state.algorithm === 'vector' || state.algorithm === 'matrix') && (
+              <text x={x} y={y + 20} fontSize={10} textAnchor="middle" fill={color}>{vector}</text>
+            )}
+          </g>
+        )
+      })}
+    </g>*/}
+    <g>
+  {visibleNodeSteps.map(({ stepIndex, step }) => {
+    const nodeIndex = nodes.findIndex((node) => node.id === step.nodeId)
+    if (nodeIndex === -1) return null
+    const x = stepX(stepIndex)
+    const y = processY(nodeIndex)
+    const kind = String(step.state.badges?.kind || '')
+    const color = kind === 'receive' ? '#2f9e44' : kind === 'send' ? '#1971c2' : '#868e96'
+    const vector = String(step.state.badges?.vector || '')
+    const event = String(step.state.badges?.event || '')
+    const rejected = Boolean(step.state.badges?.rejected)
+    const matrixRows = Array.isArray(step.state.badges?.matrixRows)
+      ? step.state.badges.matrixRows as string[]
+      : []
+    return (
+      <g key={step.id}>
+        <circle cx={x} cy={y} r={5} fill={rejected ? '#e03131' : color} stroke="#fff" strokeWidth={2} />
+        {rejected && (
+          <g stroke="#e03131" strokeWidth={3} strokeLinecap="round">
+            <line x1={x - 9} y1={y - 9} x2={x + 9} y2={y + 9} />
+            <line x1={x + 9} y1={y - 9} x2={x - 9} y2={y + 9} />
+          </g>
+        )}
+        <text x={x} y={y - 10} fontSize={10} textAnchor="middle" fill="#222" fontWeight={700}>{event}</text>
+        {state.algorithm === 'vector' && vector && (
+          <text x={x} y={y + 20} fontSize={10} textAnchor="middle" fill={color}>{vector}</text>
+        )}
+        {state.algorithm === 'matrix' && matrixRows.map((row, rowIndex) => (
+          <text key={rowIndex} x={x} y={y + 20 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={rejected ? '#e03131' : color}>{row}</text>
+        ))}
+      </g>
+    )
+  })}
+</g>
 <g>
   {pairs.map((pair) => {
     const { sendIndex, deliverIndex, send } = pair
@@ -1096,17 +1151,21 @@ const x1 = stepX(sharedSendIndex)
             {send.msgType}{send.clock !== undefined ? `@${send.clock}` : ''}
           </text>
 
-          {/* ✅ send dot + clock on sender lane */}
+            {/* ✅ send dot + clock on sender lane */}
           <circle cx={x1} cy={y1} r={5} fill={color} />
+                {send.clock !== undefined && (
           <text x={x1} y={y1 - 10} fontSize={11} textAnchor="middle" fill={color} fontWeight={600}>
             {send.clock}
           </text>
+        )}
 
           {/* ✅ receive dot + max(Cj, Csend)+1 on receiver lane */}
           <circle cx={x2} cy={y2} r={5} fill={color} />
-          <text x={x2} y={y2 - 10} fontSize={11} textAnchor="middle" fill={color} fontWeight={600}>
-            {receiverClockAtDelivery}
-          </text>
+          {send.clock !== undefined && (
+  <text x={x2} y={y2 - 10} fontSize={11} textAnchor="middle" fill={color} fontWeight={600}>
+    {receiverClockAtDelivery}
+  </text>
+)}
         </g>
       )
     } else {
@@ -1124,9 +1183,11 @@ const x1 = stepX(sharedSendIndex)
 
           {/* ✅ send dot + clock always visible even in flight */}
           <circle cx={x1} cy={y1} r={5} fill={color} />
-          <text x={x1} y={y1 - 10} fontSize={11} textAnchor="middle" fill={color} fontWeight={600}>
-            {send.clock}
-          </text>
+          {send.clock !== undefined && (
+  <text x={x1} y={y1 - 10} fontSize={11} textAnchor="middle" fill={color} fontWeight={600}>
+    {send.clock}
+  </text>
+)}
         </g>
       )
     }

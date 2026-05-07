@@ -134,24 +134,31 @@ export default function App() {
 
   // ✅ Générer le cinema EN PREMIER, avant tout envoi
  try {
+    console.log('🔵 step 1: importing cinema...')
     const { generateRicartAgrawalaCinema } = await import('./features/sim/algorithms/ricartAgrawalaCinema')
     const scenarioMap: Record<string, string> = {
       scenario1: './features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario1',
       scenario2: './features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario2',
       scenario3: './features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario3',
     }
+    console.log('🔵 step 2: importing scenario...', scenarioId)
     const { default: scenario } = await import(/* @vite-ignore */ scenarioMap[scenarioId])
+    console.log('🔵 step 3: scenario loaded:', scenario)
     const payload = generateRicartAgrawalaCinema({
       requester,
       processes: processes.map((p) => p.id),
       alsoRequesting: scenario.alsoRequesting,
     })
+    console.log('🔵 step 4: payload steps count:', payload.steps.length)
     window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
     window.dispatchEvent(new CustomEvent('sim:init_processes', { 
       detail: processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' })) 
     }))
+    console.log('🔵 step 5: events dispatched ✅')
     appendLog('Loaded cinema payload for playback')}
    catch (e) {
+      console.error('❌ FAILED AT:', e)
+
     appendLog('Failed to load cinema payload: ' + String(e))
   }
 
@@ -376,7 +383,11 @@ export default function App() {
             <div className="left">
               <Card shadow="sm">
                 <ControlPanel
-                  onStart={stop}          // bouton Stop uniquement
+                  /*onStart={stop} */         // bouton Stop uniquement
+                  onStart={() => {
+                  initSim(algorithm)
+                  appendLog('Simulation started')
+                }}
                   onStop={stop}
                   onRequestCS={requestCS}
                   onPassToken={passToken}

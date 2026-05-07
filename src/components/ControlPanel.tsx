@@ -145,10 +145,6 @@ export default function ControlPanel({
             <Switch label="Auto Run" checked={autoRun} onChange={(e) => setAutoRun(e.currentTarget.checked)} />
           </Group>
           <Slider label={`Speed: ${speed} ms`} min={50} max={2000} step={50} value={speed} onChange={(v) => setSpeed(v)} />
-
-          {algorithm === 'ricart' && <Button onClick={onRequestCS}>Request CS (Ricart-Agrawala)</Button>}
-          {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
-          {algorithm === 'bully' && <Button onClick={onBullyElection}>Start Bully Election</Button>}
           {algorithm === 'suzuki' && <Button onClick={onSuzukiRequest}>Request CS (Suzuki-Kasami)</Button>}
           {algorithm === 'vector' && <Button onClick={onVectorScenario}>New Random Scenario</Button>}
           {algorithm === 'matrix' && <Button onClick={onMatrixScenario}>New Causal Delivery Scenario</Button>}

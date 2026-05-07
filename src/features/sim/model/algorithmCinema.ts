@@ -23,7 +23,7 @@ export type MessageStep = {
   to: NodeId
   msgType: string
   meta?: any
-  clock: number          // ← Lamport timestamp at send time
+  clock?: number          // ← Lamport timestamp at send time
 
 }
 
