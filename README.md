@@ -4,6 +4,12 @@ An interactive, step-by-step visualizer for classic distributed systems algorith
 
 ---
 
+## 🌐 Live Demo
+
+👉 **[Accéder à la démo en ligne](https://drive.google.com/file/d/1DvpcORnoLihb16mc9dqSGYUWHJgU5ebL/view?fbclid=IwY2xjawRsSOdleHRuA2FlbQIxMABicmlkETFkWURzbnJ0dmJIUUswMHhWc3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHrWVP_4nbVJvC54PnkvuLWALPJZybFxbBsnEptKJAXVKTqvO9r1UMIaEPCbd_aem__JCLveLnnC1yWFXKB7_EqQ)**
+
+> Aucune installation requise — fonctionne directement dans le navigateur.
+
 ## ✨ Features
 
 - 🎬 **Cinema playback engine** — step forward/backward through any algorithm frame by frame
